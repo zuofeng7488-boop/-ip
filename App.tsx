@@ -12,7 +12,10 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  FilePlus2
+  FilePlus2,
+  Settings,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { CharacterProfile, SceneSetting } from './types';
 import { InputGroup } from './components/InputGroup';
@@ -120,11 +123,23 @@ const App: React.FC = () => {
     new Set(characters.length > 0 ? [characters[0].id] : [])
   );
 
+  const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('geminiApiKey') || '');
+  const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('selectedGenModel') || 'gemini-2.5-flash-image');
+  const [showApiKey, setShowApiKey] = useState(false);
+
   const printRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const activeCharacter = characters.find(c => c.id === activeCharacterId);
   const activeScene = activeCharacter?.scenes.find(s => s.id === activeSceneId);
+
+  useEffect(() => {
+    localStorage.setItem('geminiApiKey', apiKey);
+  }, [apiKey]);
+  
+  useEffect(() => {
+    localStorage.setItem('selectedGenModel', selectedModel);
+  }, [selectedModel]);
 
   const handleImagePreview = (url: string) => {
     setPreviewImageUrl(url);
@@ -150,7 +165,8 @@ const App: React.FC = () => {
             windowHeight: element.scrollHeight,
           });
 
-          const imgData = canvas.toDataURL('image/png');
+          const imgData = canvas.toDataURL('image/jpeg', 0.85);
+
           const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
           const imgProps = pdf.getImageProperties(imgData);
           const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -165,7 +181,7 @@ const App: React.FC = () => {
           let position = 0;
           
           while (position < canvasHeightInPdf) {
-            pdf.addImage(imgData, 'PNG', 0, -position, pdfWidth, canvasHeightInPdf);
+            pdf.addImage(imgData, 'JPEG', 0, -position, pdfWidth, canvasHeightInPdf, undefined, 'FAST');
             position += pdfHeight;
             if (position < canvasHeightInPdf) {
               pdf.addPage();
@@ -179,8 +195,6 @@ const App: React.FC = () => {
           setIsExporting(false);
         }
       };
-
-      // Timeout to allow images to potentially load and DOM to fully render
       setTimeout(generatePdf, 500);
     }
   }, [isExporting, characters]);
@@ -407,6 +421,42 @@ const App: React.FC = () => {
           ))}
         </div>
 
+        <div className="p-4 border-t border-slate-800 space-y-4">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Settings className="w-4 h-4" /> 配置</h3>
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-1.5 block">Gemini API Key</label>
+            <div className="relative">
+              <input 
+                type={showApiKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="在此输入您的 API Key"
+                className="w-full bg-slate-800 border border-slate-700 rounded-md p-2 text-sm text-slate-100 focus:ring-2 focus:ring-indigo-500 outline-none pr-10"
+              />
+              <button 
+                onClick={() => setShowApiKey(!showApiKey)} 
+                className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-white"
+                title={showApiKey ? '隐藏' : '显示'}
+              >
+                {showApiKey ? <EyeOff className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-1.5 block">生图模型</label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-md p-2 text-sm text-slate-100 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none bg-no-repeat bg-right pr-8"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
+            >
+              <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image (快速)</option>
+              <option value="gemini-3-pro-image-preview">Gemini 3 Pro Image (高质量)</option>
+            </select>
+            <p className="text-xs text-slate-500 mt-1">高质量模型可能需要付费项目 API Key。</p>
+          </div>
+        </div>
+
         <div className="p-4 border-t border-slate-800 space-y-2">
           <button onClick={addNewCharacter} className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-300 p-2.5 rounded-lg text-sm font-medium transition-colors"><Plus className="w-4 h-4"/> 添加新角色</button>
           <button onClick={triggerExportPDF} disabled={isExporting} className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900/50 disabled:text-slate-400 disabled:cursor-not-allowed text-white p-2.5 rounded-lg text-sm font-medium transition-colors">{isExporting ? <><Clock className="w-4 h-4 animate-spin"/> 正在导出...</> : <><Download className="w-4 h-4" /> 导出设定集 PDF</>}</button>
@@ -460,11 +510,11 @@ const App: React.FC = () => {
                   <div className="space-y-6">
                     <div>
                       <InputGroup label="服装配饰" value={activeScene.clothing} onChange={(v) => updateScene(activeCharacter.id, activeScene.id, 'clothing', v)} multiline placeholder="描述此场景的服装细节..."/>
-                      <div className="mt-4"><DetailImageUploader label="服装配饰" imageUrl={activeScene.clothingImage} prompt={activeScene.clothingPrompt} character={activeCharacter} scene={activeScene} context="Clothing" onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'clothingImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'clothingPrompt', prompt)} onImageClick={handleImagePreview}/></div>
+                      <div className="mt-4"><DetailImageUploader label="服装配饰" imageUrl={activeScene.clothingImage} prompt={activeScene.clothingPrompt} character={activeCharacter} scene={activeScene} context="Clothing" apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'clothingImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'clothingPrompt', prompt)} onImageClick={handleImagePreview}/></div>
                     </div>
                     <div>
                       <InputGroup label="道具 / 武器" value={activeScene.props} onChange={(v) => updateScene(activeCharacter.id, activeScene.id, 'props', v)} placeholder="例如：长剑，智能手机"/>
-                      <div className="mt-4"><DetailImageUploader label="道具 / 武器" imageUrl={activeScene.propsImage} prompt={activeScene.propsPrompt} character={activeCharacter} scene={activeScene} context="Props" onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'propsImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'propsPrompt', prompt)} onImageClick={handleImagePreview}/></div>
+                      <div className="mt-4"><DetailImageUploader label="道具 / 武器" imageUrl={activeScene.propsImage} prompt={activeScene.propsPrompt} character={activeCharacter} scene={activeScene} context="Props" apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'propsImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'propsPrompt', prompt)} onImageClick={handleImagePreview}/></div>
                     </div>
                   </div>
                 </section>
@@ -473,14 +523,14 @@ const App: React.FC = () => {
               <div className="lg:col-span-8">
                 <div className="flex items-center justify-between mb-4">
                    <h3 className="text-sm font-bold text-white flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-500" /> 视觉参考 (本场景)</h3>
-                   <span className="text-xs text-slate-500 italic">由 Gemini 2.5 Flash 驱动 或 手动上传</span>
+                   <span className="text-xs text-slate-500 italic">由 {selectedModel} 驱动 或 手动上传</span>
                 </div>
                
                 <div className="grid grid-cols-2 grid-rows-2 gap-4" style={{minHeight: '600px'}}>
-                  <ImageViewer view="Full" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.full} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'full', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'full', p)} onImageClick={handleImagePreview}/>
-                  <ImageViewer view="Front" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.front} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'front', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'front', p)} onImageClick={handleImagePreview}/>
+                  <ImageViewer view="Full" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.full} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'full', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'full', p)} onImageClick={handleImagePreview}/>
+                  <ImageViewer view="Front" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.front} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'front', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'front', p)} onImageClick={handleImagePreview}/>
                   <CompositeViewer scene={activeScene} onImageUpdate={(b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'composite', b64)} onImageClick={handleImagePreview} />
-                  <ImageViewer view="Side" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.side} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'side', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'side', p)} onImageClick={handleImagePreview}/>
+                  <ImageViewer view="Side" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.side} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'side', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'side', p)} onImageClick={handleImagePreview}/>
                 </div>
 
                 <div className="mt-4 bg-slate-900/30 border border-dashed border-slate-800 rounded-lg p-4 flex items-start gap-4">

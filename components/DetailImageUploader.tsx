@@ -10,6 +10,8 @@ interface DetailImageUploaderProps {
   character: CharacterProfile;
   scene: SceneSetting;
   context: 'Clothing' | 'Props';
+  apiKey: string;
+  selectedModel: string;
   onImageUpdate: (base64: string) => void;
   onPromptChange: (prompt: string) => void;
   onImageClick: (url: string) => void;
@@ -22,6 +24,8 @@ export const DetailImageUploader: React.FC<DetailImageUploaderProps> = ({
     character,
     scene,
     context,
+    apiKey,
+    selectedModel,
     onImageUpdate,
     onPromptChange,
     onImageClick,
@@ -93,11 +97,11 @@ export const DetailImageUploader: React.FC<DetailImageUploaderProps> = ({
     setLoading(true);
     try {
       const itemPrompt = `Generate a concept art image of a single ${context === 'Clothing' ? 'piece of clothing/accessory' : 'prop/weapon'} on a neutral, isolated background. Item details: "${prompt}"`;
-      const base64 = await generateCharacterImage(character, scene, itemPrompt, [], "1:1");
+      const base64 = await generateCharacterImage(apiKey, selectedModel, character, scene, itemPrompt, [], "1:1");
       onImageUpdate(base64);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("生成失败，请检查 API Key 并重试。");
+      alert(`生成失败: ${error.message}`);
     } finally {
       setLoading(false);
     }

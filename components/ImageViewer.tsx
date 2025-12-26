@@ -8,6 +8,8 @@ interface ImageViewerProps {
   character: CharacterProfile;
   scene: SceneSetting;
   prompt: string;
+  apiKey: string;
+  selectedModel: string;
   onImageUpdate: (view: ViewType, base64: string) => void;
   onPromptChange: (view: ViewType, prompt: string) => void;
   onImageClick: (url: string) => void;
@@ -25,7 +27,7 @@ interface RefSelection {
     prop: boolean;
 }
 
-export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene, prompt, onImageUpdate, onPromptChange, onImageClick }) => {
+export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene, prompt, apiKey, selectedModel, onImageUpdate, onPromptChange, onImageClick }) => {
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageUrl = scene.generatedImages[view.toLowerCase() as keyof typeof scene.generatedImages];
@@ -65,11 +67,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
             mainPrompt = `A detailed close-up facial portrait from a ${view.toLowerCase()} view. Strictly maintain all facial features, hair, and style from the reference image. This is a headshot.`;
         }
       
-      const base64 = await generateCharacterImage(character, scene, mainPrompt, references, aspectRatio);
+      const base64 = await generateCharacterImage(apiKey, selectedModel, character, scene, mainPrompt, references, aspectRatio);
       onImageUpdate(view, base64);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("生成失败，请检查 API Key 并重试。");
+      alert(`生成失败: ${error.message}`);
     } finally {
       setLoading(false);
     }

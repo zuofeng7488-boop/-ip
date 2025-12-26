@@ -1,18 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 import { CharacterProfile, SceneSetting, ReferenceImage } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const MODEL_NAME = 'gemini-2.5-flash-image';
-
 export const generateCharacterImage = async (
+  apiKey: string,
+  modelName: string,
   character: CharacterProfile,
   scene: SceneSetting,
   customPrompt: string,
   references: ReferenceImage[],
   aspectRatio: "1:1" | "9:16"
 ): Promise<string> => {
-  
+  if (!apiKey) {
+    throw new Error("API Key 未配置。请在左侧配置面板中输入您的 Gemini API Key。");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
   const prompt = `
     Task: Generate a high-quality piece of concept art.
     Style: Cinematic, detailed digital painting, photorealistic textures, 4k resolution.
@@ -47,7 +50,7 @@ export const generateCharacterImage = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: modelName,
       contents: { parts },
       config: {
         imageConfig: {
@@ -62,9 +65,12 @@ export const generateCharacterImage = async (
       }
     }
     
-    throw new Error("No image generated.");
-  } catch (error) {
+    throw new Error("模型未返回图片，请检查提示词或更换模型重试。");
+  } catch (error: any) {
     console.error("Gemini Image Generation Error:", error);
+    if (error.message?.includes('API key not valid')) {
+       throw new Error("API Key 无效或不正确，请检查后重试。");
+    }
     throw error;
   }
 };
