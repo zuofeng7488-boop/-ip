@@ -30,6 +30,7 @@ export interface SceneSetting {
   propsPrompt: string;
   generatedImages: CharacterImages;
   prompts: CharacterPrompts;
+  fullBodyStyle: string;
 }
 
 export interface CharacterProfile {

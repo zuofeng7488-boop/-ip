@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Image as ImageIcon, Loader2, RefreshCw, ZoomIn } from 'lucide-react';
+import { Upload, Image as ImageIcon, Loader2, RefreshCw, Edit, Download } from 'lucide-react';
 import { CharacterProfile, SceneSetting } from '../types';
 import { generateCharacterImage } from '../services/geminiService';
 
@@ -14,7 +14,7 @@ interface DetailImageUploaderProps {
   selectedModel: string;
   onImageUpdate: (base64: string) => void;
   onPromptChange: (prompt: string) => void;
-  onImageClick: (url: string) => void;
+  onImageClick: (view: string, url: string) => void;
 }
 
 export const DetailImageUploader: React.FC<DetailImageUploaderProps> = ({ 
@@ -59,7 +59,6 @@ export const DetailImageUploader: React.FC<DetailImageUploaderProps> = ({
             let sourceY = 0;
             const cropSize = Math.min(sourceWidth, sourceHeight);
 
-            // Calculate starting X and Y for center crop
             if (sourceWidth > sourceHeight) {
                 sourceX = (sourceWidth - sourceHeight) / 2;
             } else {
@@ -106,6 +105,17 @@ export const DetailImageUploader: React.FC<DetailImageUploaderProps> = ({
       setLoading(false);
     }
   };
+  
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!imageUrl) return;
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `${character.name}-${scene.name}-${label}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="space-y-2">
@@ -143,12 +153,21 @@ export const DetailImageUploader: React.FC<DetailImageUploaderProps> = ({
         className="relative group w-full h-28 bg-slate-800/50 border-2 border-dashed border-slate-700 rounded-lg overflow-hidden flex items-center justify-center"
       >
         {imageUrl ? (
-          <button type="button" onClick={() => onImageClick(imageUrl)} className="w-full h-full block">
-            <img src={imageUrl} alt={`${label} reference`} className="w-full h-full object-cover" />
-             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
-              <ZoomIn className="w-8 h-8 text-white" />
-            </div>
-          </button>
+          <>
+            <button type="button" onClick={() => onImageClick(context, imageUrl)} className="w-full h-full block">
+              <img src={imageUrl} alt={`${label} reference`} className="w-full h-full object-cover" />
+               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                <Edit className="w-8 h-8 text-white" />
+              </div>
+            </button>
+            <button
+                onClick={handleDownload}
+                className="absolute top-2 right-2 p-2 bg-slate-800/60 rounded-full text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all z-20"
+                title="下载图片"
+            >
+                <Download className="w-4 h-4" />
+            </button>
+          </>
         ) : (
           <div className="text-center p-2 text-slate-500">
             <ImageIcon className="w-6 h-6 mx-auto mb-1" />

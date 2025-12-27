@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ViewType, CharacterProfile, SceneSetting, ReferenceImage } from '../types';
 import { generateCharacterImage } from '../services/geminiService';
-import { Loader2, RefreshCw, Image as ImageIcon, Upload, ZoomIn, CheckSquare, Square } from 'lucide-react';
+import { Loader2, RefreshCw, Image as ImageIcon, Upload, Edit, CheckSquare, Square, Brush, Download } from 'lucide-react';
 
 interface ImageViewerProps {
   view: ViewType;
@@ -10,9 +10,11 @@ interface ImageViewerProps {
   prompt: string;
   apiKey: string;
   selectedModel: string;
+  fullBodyStyle?: string;
   onImageUpdate: (view: ViewType, base64: string) => void;
   onPromptChange: (view: ViewType, prompt: string) => void;
-  onImageClick: (url: string) => void;
+  onImageClick: (view: ViewType, url: string) => void;
+  onStyleChange?: (style: string) => void;
 }
 
 const viewNames: Record<ViewType, string> = {
@@ -21,13 +23,15 @@ const viewNames: Record<ViewType, string> = {
   Full: '全身'
 };
 
+const styleOptions = ['电影写实', '卡通动漫', '3D渲染', '水墨动画'];
+
 interface RefSelection {
     face: boolean;
     clothing: boolean;
     prop: boolean;
 }
 
-export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene, prompt, apiKey, selectedModel, onImageUpdate, onPromptChange, onImageClick }) => {
+export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene, prompt, apiKey, selectedModel, fullBodyStyle, onImageUpdate, onPromptChange, onImageClick, onStyleChange }) => {
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageUrl = scene.generatedImages[view.toLowerCase() as keyof typeof scene.generatedImages];
@@ -67,7 +71,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
             mainPrompt = `A detailed close-up facial portrait from a ${view.toLowerCase()} view. Strictly maintain all facial features, hair, and style from the reference image. This is a headshot.`;
         }
       
-      const base64 = await generateCharacterImage(apiKey, selectedModel, character, scene, mainPrompt, references, aspectRatio);
+      const base64 = await generateCharacterImage(apiKey, selectedModel, character, scene, mainPrompt, references, aspectRatio, view === 'Full' ? fullBodyStyle : undefined);
       onImageUpdate(view, base64);
     } catch (error: any) {
       console.error(error);
@@ -89,7 +93,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
     reader.onload = (e) => {
         const imageUrl = e.target?.result as string;
 
-        // Only crop for Front and Side views which are square.
         if (view !== 'Front' && view !== 'Side') {
             onImageUpdate(view, imageUrl);
             return;
@@ -100,7 +103,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             if (!ctx) {
-                // Fallback to original image if canvas fails
                 onImageUpdate(view, imageUrl);
                 return;
             }
@@ -143,6 +145,18 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
   const toggleRef = (ref: keyof RefSelection) => {
       setSelectedRefs(prev => ({ ...prev, [ref]: !prev[ref] }));
   }
+  
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!imageUrl) return;
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `${character.name}-${scene.name}-${view}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   const RefButton: React.FC<{
     name: keyof RefSelection,
@@ -200,16 +214,25 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
 
       <div className="relative group w-full flex-1 bg-slate-900 border-2 border-dashed border-slate-700 rounded-lg overflow-hidden flex items-center justify-center min-h-0">
         {imageUrl ? (
-          <button type="button" onClick={() => onImageClick(imageUrl)} className="w-full h-full block">
-            <img 
-              src={imageUrl} 
-              alt={`${character.name} ${view}`} 
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
-              <ZoomIn className="w-10 h-10 text-white" />
-            </div>
-          </button>
+          <>
+            <button type="button" onClick={() => onImageClick(view, imageUrl)} className="w-full h-full block">
+              <img 
+                src={imageUrl} 
+                alt={`${character.name} ${view}`} 
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                <Edit className="w-10 h-10 text-white" />
+              </div>
+            </button>
+            <button
+                onClick={handleDownload}
+                className="absolute top-2 right-2 p-2 bg-slate-800/60 rounded-full text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all z-20"
+                title="下载图片"
+            >
+                <Download className="w-4 h-4" />
+            </button>
+          </>
         ) : (
           <div className="text-center p-4">
             <ImageIcon className="w-8 h-8 text-slate-600 mx-auto mb-2" />
@@ -227,12 +250,25 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
       </div>
        {view === 'Full' && (
         <div className="flex flex-col gap-2">
-          <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">参考图选项</label>
-            <div className="flex items-center gap-2">
-                <RefButton name="face" label="面部" imgUrl={scene.generatedImages.front} />
-                <RefButton name="clothing" label="服装" imgUrl={scene.clothingImage} />
-                <RefButton name="prop" label="道具" imgUrl={scene.propsImage} />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">艺术风格</label>
+                <select
+                  value={fullBodyStyle}
+                  onChange={(e) => onStyleChange?.(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-md p-1.5 text-xs text-slate-100 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none bg-no-repeat bg-right pr-6"
+                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: 'right 0.25rem center', backgroundSize: '1.25em 1.25em' }}
+                >
+                    {styleOptions.map(style => <option key={style} value={style}>{style}</option>)}
+                </select>
+            </div>
+             <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">参考图选项</label>
+                <div className="flex items-center gap-1">
+                    <RefButton name="face" label="面" imgUrl={scene.generatedImages.front} />
+                    <RefButton name="clothing" label="服" imgUrl={scene.clothingImage} />
+                    <RefButton name="prop" label="道" imgUrl={scene.propsImage} />
+                </div>
             </div>
           </div>
           <div>
@@ -240,7 +276,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({ view, character, scene
               生成描述词
             </label>
             <textarea
-              className="mt-1.5 w-full bg-slate-800 border border-slate-700 rounded-md p-2 text-sm text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none h-20"
+              className="mt-1.5 w-full bg-slate-800 border border-slate-700 rounded-md p-2 text-sm text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none h-16"
               value={prompt}
               onChange={(e) => onPromptChange(view, e.target.value)}
               placeholder={`描述${viewNames[view]}的细节...`}

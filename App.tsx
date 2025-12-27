@@ -17,11 +17,11 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import { CharacterProfile, SceneSetting } from './types';
+import { CharacterProfile, SceneSetting, CharacterImages } from './types';
 import { InputGroup } from './components/InputGroup';
 import { ImageViewer } from './components/ImageViewer';
 import { DetailImageUploader } from './components/DetailImageUploader';
-import { ImagePreviewModal } from './components/ImagePreviewModal';
+import { ImageEditorModal } from './components/ImageEditorModal';
 import { ExportComponent } from './components/ExportComponent';
 import { CompositeViewer } from './components/CompositeViewer';
 
@@ -47,6 +47,7 @@ const createNewScene = (name: string): SceneSetting => ({
   propsPrompt: '',
   generatedImages: { front: null, side: null, full: null, composite: null },
   prompts: { front: '', side: '', full: '', composite: '' },
+  fullBodyStyle: '电影写实',
 });
 
 
@@ -76,6 +77,7 @@ const initialCharacters: CharacterProfile[] = [
           full: '身穿带LED灯带的黑色皮风衣和战术靴的男性，站在霓虹灯闪烁的雨夜街头，全身照，动态姿势',
           composite: ''
         },
+        fullBodyStyle: '电影写实',
       }
     ],
   },
@@ -104,6 +106,7 @@ const initialCharacters: CharacterProfile[] = [
           full: '身穿连体裤的女性机械师，扛着巨大扳手，全身照，站在一艘飞船引擎旁',
           composite: ''
         },
+        fullBodyStyle: '电影写实',
       }
     ]
   },
@@ -115,7 +118,7 @@ const App: React.FC = () => {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(characters[0]?.scenes[0]?.id || null);
   
   const [isExporting, setIsExporting] = useState(false);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [editingImage, setEditingImage] = useState<{ view: string; url: string } | null>(null);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
@@ -141,8 +144,9 @@ const App: React.FC = () => {
     localStorage.setItem('selectedGenModel', selectedModel);
   }, [selectedModel]);
 
-  const handleImagePreview = (url: string) => {
-    setPreviewImageUrl(url);
+  const handleImageEdit = (view: string, url: string) => {
+    if (!url) return;
+    setEditingImage({ view, url });
   };
 
   useEffect(() => {
@@ -150,54 +154,69 @@ const App: React.FC = () => {
       nameInputRef.current.focus();
     }
   }, [editingId]);
-
+  
   useEffect(() => {
-    if (isExporting && printRef.current) {
+    if (isExporting) {
       const generatePdf = async () => {
         const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const margin = 15;
+        const contentWidth = pdfWidth - margin * 2;
+        let yPos = margin;
+
         try {
-          const element = printRef.current;
-          const canvas = await window.html2canvas(element, {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: '#0f172a',
-            windowWidth: element.scrollWidth,
-            windowHeight: element.scrollHeight,
-          });
+          const exportContainer = printRef.current;
+          if (!exportContainer) throw new Error("Export container not found.");
 
-          const imgData = canvas.toDataURL('image/jpeg', 0.85);
+          const blocks = Array.from(exportContainer.querySelectorAll('.pdf-block')) as HTMLElement[];
 
-          const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-          const imgProps = pdf.getImageProperties(imgData);
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = pdf.internal.pageSize.getHeight();
-          
-          const canvasWidth = imgProps.width;
-          const canvasHeight = imgProps.height;
-          
-          const ratio = canvasWidth / pdfWidth;
-          const canvasHeightInPdf = canvasHeight / ratio;
-          
-          let position = 0;
-          
-          while (position < canvasHeightInPdf) {
-            pdf.addImage(imgData, 'JPEG', 0, -position, pdfWidth, canvasHeightInPdf, undefined, 'FAST');
-            position += pdfHeight;
-            if (position < canvasHeightInPdf) {
-              pdf.addPage();
+          for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            
+            const canvas = await window.html2canvas(block, {
+              scale: 2,
+              useCORS: true,
+              backgroundColor: '#0f172a',
+            });
+            
+            const imgData = canvas.toDataURL('image/jpeg', 0.9);
+            const imgProps = pdf.getImageProperties(imgData);
+            const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+
+            const isCharacterHeader = block.tagName.toLowerCase() === 'header' && block.querySelector('h2');
+            const isFirstCharacterBlock = i === 1;
+            if (isCharacterHeader && !isFirstCharacterBlock) {
+                 if (yPos > margin) {
+                    pdf.addPage();
+                    yPos = margin;
+                 }
             }
+            
+            if (yPos > margin && (yPos + imgHeight > pdfHeight - margin)) {
+              pdf.addPage();
+              yPos = margin;
+            }
+
+            pdf.addImage(imgData, 'JPEG', margin, yPos, contentWidth, imgHeight, undefined, 'FAST');
+            yPos += imgHeight + 4;
           }
+            
           pdf.save(`CineCast_角色设定集.pdf`);
+
         } catch (err) {
-          console.error("Export failed", err);
-          alert("PDF 导出失败。");
+            console.error("Export failed", err);
+            alert("PDF 导出失败。");
         } finally {
-          setIsExporting(false);
+            setIsExporting(false);
         }
       };
+      
       setTimeout(generatePdf, 500);
     }
-  }, [isExporting, characters]);
+  }, [isExporting]);
+
 
   const triggerExportPDF = () => {
     if (!characters.length) {
@@ -346,6 +365,24 @@ const App: React.FC = () => {
       else newSet.add(charId);
       return newSet;
     });
+  };
+  
+  const handleSaveEditedImage = (newUrl: string) => {
+    if (!editingImage || !activeCharacter || !activeScene) return;
+
+    const { view } = editingImage;
+    const charId = activeCharacter.id;
+    const sceneId = activeScene.id;
+
+    if (view === 'Clothing') {
+      updateScene(charId, sceneId, 'clothingImage', newUrl);
+    } else if (view === 'Props') {
+      updateScene(charId, sceneId, 'propsImage', newUrl);
+    } else if (['front', 'side', 'full', 'composite'].includes(view.toLowerCase())) {
+      updateSceneSubField(charId, sceneId, 'generatedImages', view.toLowerCase() as keyof CharacterImages, newUrl);
+    }
+    
+    setEditingImage(null);
   };
 
   return (
@@ -510,11 +547,11 @@ const App: React.FC = () => {
                   <div className="space-y-6">
                     <div>
                       <InputGroup label="服装配饰" value={activeScene.clothing} onChange={(v) => updateScene(activeCharacter.id, activeScene.id, 'clothing', v)} multiline placeholder="描述此场景的服装细节..."/>
-                      <div className="mt-4"><DetailImageUploader label="服装配饰" imageUrl={activeScene.clothingImage} prompt={activeScene.clothingPrompt} character={activeCharacter} scene={activeScene} context="Clothing" apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'clothingImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'clothingPrompt', prompt)} onImageClick={handleImagePreview}/></div>
+                      <div className="mt-4"><DetailImageUploader label="服装配饰" imageUrl={activeScene.clothingImage} prompt={activeScene.clothingPrompt} character={activeCharacter} scene={activeScene} context="Clothing" apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'clothingImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'clothingPrompt', prompt)} onImageClick={handleImageEdit}/></div>
                     </div>
                     <div>
                       <InputGroup label="道具 / 武器" value={activeScene.props} onChange={(v) => updateScene(activeCharacter.id, activeScene.id, 'props', v)} placeholder="例如：长剑，智能手机"/>
-                      <div className="mt-4"><DetailImageUploader label="道具 / 武器" imageUrl={activeScene.propsImage} prompt={activeScene.propsPrompt} character={activeCharacter} scene={activeScene} context="Props" apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'propsImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'propsPrompt', prompt)} onImageClick={handleImagePreview}/></div>
+                      <div className="mt-4"><DetailImageUploader label="道具 / 武器" imageUrl={activeScene.propsImage} prompt={activeScene.propsPrompt} character={activeCharacter} scene={activeScene} context="Props" apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(base64) => updateScene(activeCharacter.id, activeScene.id, 'propsImage', base64)} onPromptChange={(prompt) => updateScene(activeCharacter.id, activeScene.id, 'propsPrompt', prompt)} onImageClick={handleImageEdit}/></div>
                     </div>
                   </div>
                 </section>
@@ -527,10 +564,10 @@ const App: React.FC = () => {
                 </div>
                
                 <div className="grid grid-cols-2 grid-rows-2 gap-4" style={{minHeight: '600px'}}>
-                  <ImageViewer view="Full" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.full} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'full', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'full', p)} onImageClick={handleImagePreview}/>
-                  <ImageViewer view="Front" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.front} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'front', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'front', p)} onImageClick={handleImagePreview}/>
-                  <CompositeViewer scene={activeScene} onImageUpdate={(b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'composite', b64)} onImageClick={handleImagePreview} />
-                  <ImageViewer view="Side" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.side} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'side', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'side', p)} onImageClick={handleImagePreview}/>
+                  <ImageViewer view="Full" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.full} apiKey={apiKey} selectedModel={selectedModel} fullBodyStyle={activeScene.fullBodyStyle} onStyleChange={(style) => updateScene(activeCharacter.id, activeScene.id, 'fullBodyStyle', style)} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'full', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'full', p)} onImageClick={handleImageEdit}/>
+                  <ImageViewer view="Front" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.front} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'front', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'front', p)} onImageClick={handleImageEdit}/>
+                  <CompositeViewer scene={activeScene} onImageUpdate={(b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'composite', b64)} onImageClick={handleImageEdit} />
+                  <ImageViewer view="Side" character={activeCharacter} scene={activeScene} prompt={activeScene.prompts.side} apiKey={apiKey} selectedModel={selectedModel} onImageUpdate={(v, b64) => updateSceneSubField(activeCharacter.id, activeScene.id, 'generatedImages', 'side', b64)} onPromptChange={(v, p) => updateSceneSubField(activeCharacter.id, activeScene.id, 'prompts', 'side', p)} onImageClick={handleImageEdit}/>
                 </div>
 
                 <div className="mt-4 bg-slate-900/30 border border-dashed border-slate-800 rounded-lg p-4 flex items-start gap-4">
@@ -543,7 +580,15 @@ const App: React.FC = () => {
         )}
       </main>
       
-      {previewImageUrl && (<ImagePreviewModal imageUrl={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />)}
+      {editingImage && activeCharacter && activeScene && (
+        <ImageEditorModal
+            imageInfo={editingImage}
+            apiKey={apiKey}
+            selectedModel={selectedModel}
+            onSave={handleSaveEditedImage}
+            onClose={() => setEditingImage(null)}
+        />
+      )}
       
       {/* Hidden container for PDF export content */}
       <div className="absolute left-[-9999px] top-0">

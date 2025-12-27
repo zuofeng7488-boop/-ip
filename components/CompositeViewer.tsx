@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { SceneSetting } from '../types';
-import { Loader2, Image as ImageIcon, ZoomIn, Combine, Settings2 } from 'lucide-react';
+import { Loader2, Image as ImageIcon, Edit, Combine, Settings2, Download } from 'lucide-react';
 import { CompositeEditorModal } from './CompositeEditorModal';
 
 interface CompositeViewerProps {
   scene: SceneSetting;
   onImageUpdate: (base64: string) => void;
-  onImageClick: (url: string) => void;
+  onImageClick: (view: string, url: string) => void;
 }
 
 export const CompositeViewer: React.FC<CompositeViewerProps> = ({ scene, onImageUpdate, onImageClick }) => {
@@ -26,6 +26,18 @@ export const CompositeViewer: React.FC<CompositeViewerProps> = ({ scene, onImage
     onImageUpdate(base64);
     setIsEditing(false);
   };
+  
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!imageUrl) return;
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `${scene.name}-三视图合一.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   return (
     <>
@@ -47,16 +59,25 @@ export const CompositeViewer: React.FC<CompositeViewerProps> = ({ scene, onImage
 
         <div className="relative group w-full flex-1 bg-slate-900 border-2 border-dashed border-slate-700 rounded-lg overflow-hidden flex items-center justify-center min-h-0">
           {imageUrl ? (
-            <button type="button" onClick={() => onImageClick(imageUrl)} className="w-full h-full block">
-              <img 
-                src={imageUrl} 
-                alt="三视图合一"
-                className="w-full h-full object-contain"
-              />
-              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
-                <ZoomIn className="w-10 h-10 text-white" />
-              </div>
-            </button>
+            <>
+              <button type="button" onClick={() => onImageClick('composite', imageUrl)} className="w-full h-full block">
+                <img 
+                  src={imageUrl} 
+                  alt="三视图合一"
+                  className="w-full h-full object-contain"
+                />
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                  <Edit className="w-10 h-10 text-white" />
+                </div>
+              </button>
+               <button
+                  onClick={handleDownload}
+                  className="absolute top-2 right-2 p-2 bg-slate-800/60 rounded-full text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all z-20"
+                  title="下载图片"
+              >
+                  <Download className="w-4 h-4" />
+              </button>
+            </>
           ) : (
             <div className="text-center p-4">
               <ImageIcon className="w-8 h-8 text-slate-600 mx-auto mb-2" />
